@@ -26,13 +26,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Cargar las voces disponibles y seleccionar una en español de Latinoamérica
     synthesis.onvoiceschanged = () => {
         const voices = synthesis.getVoices();
-        spanishVoice = voices.find(voice => voice.lang.startsWith('es-LA') || voice.lang.startsWith('es-US') || voice.lang.startsWith('es-MX'));
-        if (!spanishVoice) {
-            spanishVoice = voices.find(voice => voice.lang.startsWith('es-'));
-        }
+        // Priorizamos voces de LA, luego US, México y finalmente cualquier variante de español.
+        spanishVoice = voices.find(voice => voice.lang.startsWith('es-LA')) || 
+                       voices.find(voice => voice.lang.startsWith('es-US')) || 
+                       voices.find(voice => voice.lang.startsWith('es-MX')) || 
+                       voices.find(voice => voice.lang.startsWith('es-'));
     };
 
-    // --- Lista de Consejos ---
+    // --- Lista de Consejos (se mantiene igual) ---
     const consejos = [
         "Hoy, enfócate en el progreso, no en la perfección.", "Un pequeño paso hoy es un gran salto para tu mañana.", "Agradece por tres cosas antes de dormir.",
         "Bebe un vaso de agua apenas te levantes.", "Escucha tu canción favorita para empezar el día con energía.", "Sonríe a un extraño, podrías cambiar su día.",
@@ -70,27 +71,32 @@ document.addEventListener('DOMContentLoaded', () => {
         "Recuerda que eres más fuerte de lo que crees."
     ];
     
-    const diasDeLaSemana = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"];
-    let conversationState = 'initial'; // 'initial' -> 'waiting_for_advice'
+    let interactionStarted = false;
 
     // --- Configuración del Reconocimiento de Voz ---
-    recognition.lang = 'es-CO'; // Español de Colombia para un toque más "paisa"
-    recognition.continuous = false; // Solo procesa un resultado
-    recognition.interimResults = false; // No muestra resultados parciales
+    recognition.lang = 'es-CO'; // Español de Colombia. Puedes probar 'es-MX' o 'es-ES'
+    recognition.continuous = false; 
+    recognition.interimResults = false;
 
     // --- Función para que el Robot Hable ---
-    function speak(text) {
-        // Detener cualquier habla anterior para evitar solapamientos
-        synthesis.cancel(); 
+    function speak(text, onEndCallback) {
+        synthesis.cancel(); // Detiene cualquier habla anterior.
         
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = spanishVoice ? spanishVoice.lang : 'es-ES';
         if (spanishVoice) {
             utterance.voice = spanishVoice;
         }
         utterance.pitch = 1;
         utterance.rate = 1;
         robotText.textContent = text;
+
+        // Cuando el robot termine de hablar, ejecuta el callback (si existe)
+        utterance.onend = () => {
+            if (onEndCallback) {
+                onEndCallback();
+            }
+        };
+        
         synthesis.speak(utterance);
     }
 
@@ -99,48 +105,50 @@ document.addEventListener('DOMContentLoaded', () => {
         userText.textContent = transcript;
         const lowerCaseTranscript = transcript.toLowerCase();
 
-        if (conversationState === 'initial' && lowerCaseTranscript.includes('hola robot')) {
-            const respuesta = 'Hola, qué tal, cómo estás el día de hoy?';
-            speak(respuesta);
-            conversationState = 'waiting_for_advice';
-        } else if (conversationState === 'waiting_for_advice' && (lowerCaseTranscript.includes('consejo') || lowerCaseTranscript.includes('dame'))) {
-            let diaEncontrado = null;
-            for (const dia of diasDeLaSemana) {
-                if (lowerCaseTranscript.includes(dia)) {
-                    diaEncontrado = dia;
-                    break;
-                }
-            }
-            
-            if (diaEncontrado) {
-                const consejoAleatorio = consejos[Math.floor(Math.random() * consejos.length)];
-                const respuesta = `De una, vamos pa' esa! Para tu ${diaEncontrado}: ${consejoAleatorio}`;
-                speak(respuesta);
-            } else {
-                speak('Claro, pero no entendí para qué día. Por favor, menciona un día de la semana.');
-            }
-            // Volvemos al estado inicial para poder saludar de nuevo
-            conversationState = 'initial'; 
+        // Ahora solo reacciona a la palabra "hola"
+        if (lowerCaseTranscript.includes('hola')) {
+            const consejoAleatorio = consejos[Math.floor(Math.random() * consejos.length)];
+            const respuesta = `¡Claro! Tu consejo de hoy es: ${consejoAleatorio}`;
+            speak(respuesta); // Da el consejo
         } else {
-            // Si no entiende, no dice nada para no ser intrusivo.
-            // Opcional: podrías agregar una respuesta como "No te entendí".
+            // Si no entiende, le pide al usuario que lo intente de nuevo.
+            speak("No te entendí. Por favor, solo di 'hola' para recibir tu consejo.", () => {
+                // Opcional: Vuelve a escuchar automáticamente después del error.
+                status.textContent = 'Escuchando...';
+                startButton.classList.add('listening');
+                recognition.start();
+            });
         }
     }
-
-    // --- Event Listeners ---
+    
+    // --- Iniciar la Interacción con el Botón ---
     startButton.addEventListener('click', () => {
-        status.textContent = 'Escuchando...';
-        startButton.classList.add('listening');
-        recognition.start();
+        if (!interactionStarted) {
+            // El robot inicia la conversación la primera vez.
+            const initialGreeting = "Hola, soy tu asistente SIF-GPT. Di 'hola' para recibir tu consejo del día.";
+            // Habla, y cuando termine, empieza a escuchar.
+            speak(initialGreeting, () => {
+                status.textContent = 'Escuchando...';
+                startButton.classList.add('listening');
+                recognition.start();
+            });
+            interactionStarted = true;
+        } else {
+            // En clics posteriores, simplemente escucha.
+            status.textContent = 'Escuchando...';
+            startButton.classList.add('listening');
+            recognition.start();
+        }
     });
 
+    // --- Eventos del Reconocimiento ---
     recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
         handleVoice(transcript);
     };
 
     recognition.onerror = (event) => {
-        status.textContent = `Error en el reconocimiento: ${event.error}`;
+        status.textContent = `Error: ${event.error}`;
     };
     
     recognition.onend = () => {
