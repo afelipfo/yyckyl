@@ -1,144 +1,217 @@
-document.addEventListener('DOMContentLoaded', () => {
-    // Referencias a elementos del DOM
-    const startButton = document.getElementById('startButton');
-    const status = document.getElementById('status');
-    const userText = document.getElementById('userText');
-    const robotText = document.getElementById('robotText');
+'use strict';
 
-    // Comprobación de APIs del navegador
+document.addEventListener('DOMContentLoaded', () => {
+    // --- 1. CONFIGURACIÓN Y ESTADO DE LA APLICACIÓN ---
+    
+    const AppState = {
+        IDLE: 'IDLE',
+        LISTENING: 'LISTENING',
+        PROCESSING: 'PROCESSING',
+        SPEAKING: 'SPEAKING',
+        ERROR: 'ERROR'
+    };
+
+    let currentState = AppState.IDLE;
+
+    const config = {
+        lang: 'es-CO', // Lenguaje para reconocimiento y síntesis
+        keywords: {
+            negativo: ["cansado", "agotado", "estresado", "triste", "preocupado", "mal", "terrible", "difícil", "regular"],
+            positivo: ["bien", "feliz", "genial", "increíble", "motivado", "contento", "emocionado", "excelente", "fantástico"]
+        },
+        responses: {
+            negativo: [
+                "Entiendo. Recuerda que está bien no estar bien. Tómate un respiro, lo mereces.",
+                "Lamento que te sientas así. A veces, una pequeña pausa puede cambiarlo todo. Respira.",
+                "Escucho lo que dices. Recuerda que eres más fuerte que tus días malos. Mañana será diferente."
+            ],
+            positivo: [
+                "¡Fantástico! Canaliza esa energía para hacer algo que amas y te impulse aún más.",
+                "Me alegra mucho escuchar eso. Aprovecha esta increíble sensación y compártela.",
+                "¡Excelente! Que esa motivación sea el combustible para alcanzar tus metas de hoy."
+            ],
+            neutral: [
+                "De acuerdo. Aquí tienes un pensamiento: la constancia es más poderosa que la intensidad.",
+                "Entendido. Te comparto una idea: el mejor momento para empezar algo fue ayer, el segundo mejor es ahora.",
+                "Recibido. Un pequeño consejo: enfócate en el progreso, no en la perfección."
+            ]
+        }
+    };
+    
+    // --- 2. REFERENCIAS AL DOM ---
+    
+    const ui = {
+        micButton: document.getElementById('mic-button'),
+        statusText: document.getElementById('status-text'),
+        userSpeech: document.getElementById('user-speech')
+    };
+
+    // --- 3. INICIALIZACIÓN DE APIS DE VOZ ---
+    
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const synthesis = window.speechSynthesis;
+
     if (!SpeechRecognition || !synthesis) {
-        status.textContent = 'Tu navegador no soporta las APIs de voz necesarias.';
-        startButton.disabled = true;
+        updateUiOnError("Tu navegador no es compatible con las tecnologías de voz. Prueba con Chrome o Edge.");
         return;
     }
+
     const recognition = new SpeechRecognition();
-    
-    // --- SECCIÓN DE INTELIGENCIA: PALABRAS CLAVE Y CONSEJOS TEMÁTICOS ---
+    recognition.lang = config.lang;
+    recognition.continuous = false; // Queremos que pare después de una frase
+    recognition.interimResults = true; // Para feedback en tiempo real
 
-    // 1. Palabras clave para detectar el estado de ánimo
-    const keywords = {
-        negativo: ["cansado", "agotado", "estresado", "triste", "preocupado", "mal", "terrible", "difícil", "regular"],
-        positivo: ["bien", "feliz", "genial", "increíble", "motivado", "contento", "emocionado", "excelente", "fantástico"]
-    };
-
-    // 2. Consejos organizados por estado de ánimo
-    const consejos = {
-        negativo: [ // Consejos para animar o calmar
-            "Respira profundo. A veces, una pausa es todo lo que necesitas.",
-            "Recuerda que todos los días malos terminan. Mañana será una nueva oportunidad.",
-            "Sé amable contigo mismo. Mereces el mismo cuidado que le darías a un amigo.",
-            "Permítete descansar. No tienes que ser productivo todo el tiempo.",
-            "El sol siempre vuelve a salir, incluso después de la tormenta más fuerte.",
-            "Escucha una canción que te guste, la música tiene el poder de sanar."
-        ],
-        positivo: [ // Consejos para mantener o potenciar la energía
-            "¡Excelente! Usa esa energía para dar el primer paso hacia una meta que tengas.",
-            "Aprovecha este momento para agradecer por tres cosas que te hacen sentir así.",
-            "Tu buena actitud es contagiosa. Compártela con alguien hoy.",
-            "Canaliza esa motivación para organizar tu semana y planificar algo emocionante.",
-            "Celebra esta sensación. Reconoce tu propia capacidad para crear días buenos."
-        ],
-        neutral: [ // Consejos generales si no se detecta un ánimo específico
-            "Un pequeño paso hoy es un gran salto para tu mañana.",
-            "Dedica 15 minutos a aprender algo nuevo.",
-            "La disciplina es el puente entre tus metas y tus logros.",
-            "Haz algo hoy que tu 'yo' del futuro agradezca.",
-            "No te compares con los demás; tu camino es único.",
-            "La gratitud transforma lo que tenemos en suficiente."
-        ]
-    };
-
-    let interactionStarted = false;
     let spanishVoice;
-
     synthesis.onvoiceschanged = () => {
         const voices = synthesis.getVoices();
-        spanishVoice = voices.find(v => v.lang.startsWith('es-LA')) || voices.find(v => v.lang.startsWith('es-US')) || voices.find(v => v.lang.startsWith('es-MX')) || voices.find(v => v.lang.startsWith('es-'));
+        spanishVoice = voices.find(v => v.lang.startsWith('es-LA')) || voices.find(v => v.lang.startsWith('es-US')) || voices.find(v => v.lang.startsWith('es-MX')) || voices.find(v => v.lang.startsWith('es-ES'));
     };
 
-    // --- Configuración del Reconocimiento de Voz ---
-    recognition.lang = 'es-CO';
-    recognition.continuous = false;
-    recognition.interimResults = false;
+    // --- 4. MANEJO DE ESTADO Y UI ---
+    
+    function setState(newState) {
+        currentState = newState;
+        document.body.className = `state-${newState.toLowerCase()}`;
+        ui.micButton.className = `mic-button ${newState.toLowerCase()}`;
 
-    // --- Función para que el Robot Hable ---
-    function speak(text, onEndCallback) {
-        synthesis.cancel();
+        switch (newState) {
+            case AppState.IDLE:
+                updateStatus("Presiona el botón para comenzar");
+                ui.micButton.disabled = false;
+                break;
+            case AppState.LISTENING:
+                updateStatus("Escuchando...", "info");
+                ui.micButton.disabled = false; // Permitir que el usuario detenga
+                break;
+            case AppState.PROCESSING:
+                updateStatus("Analizando...", "info");
+                ui.micButton.disabled = true;
+                break;
+            case AppState.SPEAKING:
+                updateStatus("Respondiendo...", "info");
+                ui.micButton.disabled = true;
+                break;
+            case AppState.ERROR:
+                ui.micButton.disabled = false;
+                break;
+        }
+    }
+
+    function updateStatus(text, type = '') {
+        ui.statusText.textContent = text;
+        ui.statusText.className = `status-text ${type}`;
+    }
+
+    function updateUiOnError(errorMessage) {
+        setState(AppState.ERROR);
+        updateStatus(errorMessage, 'error');
+    }
+
+    // --- 5. LÓGICA DE CONVERSACIÓN (IA) ---
+    
+    function processVoiceInput(transcript) {
+        setState(AppState.PROCESSING);
+        const lowerCaseTranscript = transcript.toLowerCase();
+        let mood = 'neutral';
+
+        if (config.keywords.negativo.some(word => lowerCaseTranscript.includes(word))) {
+            mood = 'negativo';
+        } else if (config.keywords.positivo.some(word => lowerCaseTranscript.includes(word))) {
+            mood = 'positivo';
+        }
+
+        const responses = config.responses[mood];
+        const response = responses[Math.floor(Math.random() * responses.length)];
+        
+        speak(response);
+    }
+
+    function speak(text) {
+        setState(AppState.SPEAKING);
         const utterance = new SpeechSynthesisUtterance(text);
         if (spanishVoice) {
             utterance.voice = spanishVoice;
         }
-        robotText.textContent = text;
         utterance.onend = () => {
-            if (onEndCallback) onEndCallback();
+            setState(AppState.IDLE);
+        };
+        utterance.onerror = () => {
+            updateUiOnError("Ocurrió un error al generar la respuesta de voz.");
+            setState(AppState.IDLE);
         };
         synthesis.speak(utterance);
     }
 
-    // --- Lógica Principal de la Conversación ---
-    function handleVoice(transcript) {
-        userText.textContent = transcript;
-        const lowerCaseTranscript = transcript.toLowerCase();
-        let mood = 'neutral'; // Por defecto, el ánimo es neutral
+    // --- 6. EVENTOS Y CONTROLADORES ---
 
-        // Detectar estado de ánimo
-        if (keywords.negativo.some(word => lowerCaseTranscript.includes(word))) {
-            mood = 'negativo';
-        } else if (keywords.positivo.some(word => lowerCaseTranscript.includes(word))) {
-            mood = 'positivo';
+    function handleMicClick() {
+        if (currentState === AppState.LISTENING) {
+            recognition.stop();
+            return;
         }
+        try {
+            recognition.start();
+        } catch (error) {
+            updateUiOnError("El reconocimiento de voz ya está activo.");
+        }
+    }
 
-        // Seleccionar un consejo basado en el ánimo detectado
-        const relevantAdviceList = consejos[mood];
-        const consejoAleatorio = relevantAdviceList[Math.floor(Math.random() * relevantAdviceList.length)];
-        
-        let responseIntro = "Entiendo. Aquí tienes un pensamiento para hoy: ";
-        if (mood === 'positivo') {
-            responseIntro = "¡Me alegra escuchar eso! Para mantener esa energía: ";
-        } else if (mood === 'negativo') {
-            responseIntro = "Lamento que te sientas así. Quizás esto te ayude: ";
+    recognition.onstart = () => {
+        setState(AppState.LISTENING);
+        ui.userSpeech.textContent = ''; // Limpiar transcripción anterior
+    };
+
+    recognition.onresult = (event) => {
+        let interimTranscript = '';
+        let finalTranscript = '';
+
+        for (let i = 0; i < event.results.length; i++) {
+            const transcriptPart = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+                finalTranscript += transcriptPart;
+            } else {
+                interimTranscript += transcriptPart;
+            }
         }
         
-        speak(responseIntro + consejoAleatorio);
+        ui.userSpeech.textContent = interimTranscript || finalTranscript; // Muestra transcripción en tiempo real
+
+        if (finalTranscript) {
+            processVoiceInput(finalTranscript);
+        }
+    };
+    
+    recognition.onerror = (event) => {
+        let errorMessage;
+        switch (event.error) {
+            case 'no-speech':
+                errorMessage = "No se detectó voz. Intenta de nuevo.";
+                break;
+            case 'not-allowed':
+                errorMessage = "Permiso de micrófono denegado.";
+                break;
+            case 'service-not-allowed':
+                errorMessage = "El navegador bloqueó el servicio de voz.";
+                break;
+            default:
+                errorMessage = `Error de reconocimiento: ${event.error}`;
+        }
+        updateUiOnError(errorMessage);
+        setState(AppState.IDLE);
+    };
+
+    recognition.onend = () => {
+        if (currentState === AppState.LISTENING) { // Si termina sin un resultado final
+            setState(AppState.IDLE);
+        }
+    };
+
+    // --- 7. INICIALIZACIÓN ---
+    
+    function init() {
+        ui.micButton.addEventListener('click', handleMicClick);
+        setState(AppState.IDLE);
     }
     
-    // --- Iniciar la Interacción con el Botón ---
-    startButton.addEventListener('click', () => {
-        const startRecognition = () => {
-            status.textContent = 'Escuchando...';
-            startButton.classList.add('listening');
-            try {
-                recognition.start();
-            } catch (e) {
-                console.error("Error al iniciar el reconocimiento:", e);
-                status.textContent = 'Error al iniciar';
-            }
-        };
-
-        if (!interactionStarted) {
-            const initialGreeting = "Hola, soy SIF-GPT. ¿Qué tal te sientes el día de hoy?";
-            speak(initialGreeting, startRecognition); // Saluda y luego escucha
-            interactionStarted = true;
-        } else {
-            speak("Claro, dime cómo estás.", startRecognition); // En interacciones posteriores
-        }
-    });
-
-    // --- Eventos del Reconocimiento ---
-    recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        handleVoice(transcript);
-    };
-
-    recognition.onerror = (event) => {
-        status.textContent = `Error: ${event.error}`;
-        startButton.classList.remove('listening');
-    };
-    
-    recognition.onend = () => {
-        status.textContent = 'Inactivo';
-        startButton.classList.remove('listening');
-    };
+    init();
 });

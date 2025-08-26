@@ -3,25 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat de Voz SIF-GPT</title>
+    <title>SIF-GPT | Asistente de Voz Profesional</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
     <link rel="stylesheet" href="style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <h1>Asistente de Voz SIF-GPT</h1>
-        <p>Presiona el botón y saluda con "Hola Robot" para comenzar.</p>
-        <button id="startButton">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
-        </button>
-        <div class="status-container">
-            <p><strong>Estado:</strong> <span id="status">Inactivo</span></p>
-            <p><strong>Tú dijiste:</strong> <span id="userText">...</span></p>
-            <p><strong>Robot dijo:</strong> <span id="robotText">...</span></p>
+    <div class="assistant-container">
+        <div class="assistant-header">
+            <h1 class="assistant-title">SIF-GPT</h1>
+            <p class="assistant-subtitle">Tu asistente personal de consejos</p>
+        </div>
+        
+        <div id="interaction-zone" class="interaction-zone">
+            <div id="button-container" class="button-container">
+                <button id="mic-button" class="mic-button" aria-label="Activar micrófono">
+                    <svg class="mic-icon" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="transcript-container">
+            <p id="status-text" class="status-text">Presiona el botón para comenzar</p>
+            <p id="user-speech" class="user-speech"></p>
         </div>
     </div>
+
     <script src="script.js"></script>
 </body>
 </html>
