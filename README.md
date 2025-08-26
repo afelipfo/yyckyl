@@ -1,2 +1,0 @@
-# yyckyl
-voice-chat testing
